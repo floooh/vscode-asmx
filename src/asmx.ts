@@ -25,7 +25,7 @@ export interface AsmxState {
     module: WebAssembly.Module,
 };
 
-async function findMainSources(): Promise<string | undefined> {
+async function findMainSource(): Promise<string | undefined> {
     const uris = await workspace.findFiles('src/main.asm', null, 1);
     return (uris.length === 1) ? uris[0].fsPath : undefined;
 }
@@ -58,7 +58,7 @@ export async function run(context: ExtensionContext, state: AsmxState, args: str
 export async function assemble(context: ExtensionContext, state: AsmxState) {
     console.log('Assemble called!');
     state.diagnostics.clear();
-    const src = await findMainSources();
+    const src = await findMainSource();
     if (src === undefined) {
         window.showErrorMessage('No project main file found (must be "src/main.asm")');
         return;
