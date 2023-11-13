@@ -1,4 +1,4 @@
-import { workspace, ExtensionContext, Uri, window } from 'vscode';
+import { workspace, ExtensionContext, Uri, window, DiagnosticCollection, Diagnostic, DiagnosticSeverity, Range } from 'vscode';
 import { Wasm } from '@vscode/wasm-wasi';
 
 async function findMainSources(): Promise<string | undefined> {
@@ -25,8 +25,9 @@ export async function run(context: ExtensionContext, wasm: Wasm, args: string[])
     }
 }
 
-export async function assemble(context: ExtensionContext, wasm: Wasm) {
+export async function assemble(context: ExtensionContext, wasm: Wasm, diagnostics: DiagnosticCollection) {
     console.log('Assemble called!');
+    diagnostics.clear();
     const src = await findMainSources();
     if (src === undefined) {
         window.showErrorMessage('No project main file found (must be "src/main.asm")');
@@ -35,4 +36,7 @@ export async function assemble(context: ExtensionContext, wasm: Wasm) {
     console.log(`assembling: ${src}`);
     await run(context, wasm, [ '-l', '-o', '-w', '-e', '-C', 'z80', '/workspace/src/main.asm' ]);
     console.log('done.');
+
+    const uri = (await workspace.findFiles('src/main.asm'))[0];
+    diagnostics.set(uri, [ new Diagnostic(new Range(2, 0, 2, 80), 'Bla bla bla', DiagnosticSeverity.Error )]);
 }

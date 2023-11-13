@@ -8,8 +8,10 @@ export async function activate(context: vscode.ExtensionContext) {
 	const wasm = await Wasm.load();
 	console.log('vscode-asmx: Wasm object loaded');
 
+	const diagnostics = vscode.languages.createDiagnosticCollection('asmx');
+
 	context.subscriptions.push(vscode.commands.registerCommand('vscode-asmx.assemble', async () => {
-		await assemble(context, wasm);
+		await assemble(context, wasm, diagnostics);
 	}));
 }
 
