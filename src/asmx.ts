@@ -1,42 +1,72 @@
-import { workspace, ExtensionContext, Uri, window, DiagnosticCollection, Diagnostic, DiagnosticSeverity, Range } from 'vscode';
-import { Wasm } from '@vscode/wasm-wasi';
+import {
+    workspace,
+    window,
+    languages,
+    ExtensionContext,
+    Uri,
+    DiagnosticCollection,
+    Diagnostic,
+    DiagnosticSeverity,
+    Range,
+    Terminal,
+} from 'vscode';
+import {
+    RootFileSystem,
+    Wasm,
+    WasmPseudoterminal
+} from '@vscode/wasm-wasi';
+
+export interface AsmxState {
+    wasm: Wasm,
+    fs: RootFileSystem,
+    pty: WasmPseudoterminal,
+    terminal: Terminal, 
+    diagnostics: DiagnosticCollection,
+    module: WebAssembly.Module,
+};
 
 async function findMainSources(): Promise<string | undefined> {
     const uris = await workspace.findFiles('src/main.asm', null, 1);
     return (uris.length === 1) ? uris[0].fsPath : undefined;
 }
 
-export async function run(context: ExtensionContext, wasm: Wasm, args: string[]) {
+export async function start(context: ExtensionContext): Promise<AsmxState> {
+    const wasm = await Wasm.load();
+    const fs = await wasm.createRootFileSystem([ { kind: 'workspaceFolder' }]);
     const pty = wasm.createPseudoterminal();
     const terminal = window.createTerminal({ name: 'asmx', pty, isTransient: true });
-    terminal.show(true);
+    const diagnostics = languages.createDiagnosticCollection('asmx');
+    const bits = await workspace.fs.readFile(Uri.joinPath(context.extensionUri, 'media/asmx.wasm'));
+    const module = await WebAssembly.compile(bits);
+    return { wasm, fs, pty, terminal, diagnostics, module };
+}
+
+export async function run(context: ExtensionContext, state: AsmxState, args: string[]) {
     try {
-        const bits = await workspace.fs.readFile(Uri.joinPath(context.extensionUri, 'media/asmx.wasm'));
-        const module = await WebAssembly.compile(bits);
-        const fs = await wasm.createRootFileSystem([ { kind: 'workspaceFolder' }]);
-        const process = await wasm.createProcess('asmx', module, {
-            rootFileSystem: fs,
-            stdio: pty.stdio,
+        state.terminal.show(true);
+        const process = await state.wasm.createProcess('asmx', state.module, {
+            rootFileSystem: state.fs,
+            stdio: state.pty.stdio,
             args,
         });
-        const result = await process.run();
+        const exitCode = await process.run();
     } catch (err) {
         window.showErrorMessage((err as Error).message);
     }
 }
 
-export async function assemble(context: ExtensionContext, wasm: Wasm, diagnostics: DiagnosticCollection) {
+export async function assemble(context: ExtensionContext, state: AsmxState) {
     console.log('Assemble called!');
-    diagnostics.clear();
+    state.diagnostics.clear();
     const src = await findMainSources();
     if (src === undefined) {
         window.showErrorMessage('No project main file found (must be "src/main.asm")');
         return;
     }
     console.log(`assembling: ${src}`);
-    await run(context, wasm, [ '-l', '-o', '-w', '-e', '-C', 'z80', '/workspace/src/main.asm' ]);
+    await run(context, state, [ '-l', '-o', '-w', '-e', '-C', 'z80', '/workspace/src/main.asm' ]);
     console.log('done.');
 
     const uri = (await workspace.findFiles('src/main.asm'))[0];
-    diagnostics.set(uri, [ new Diagnostic(new Range(2, 0, 2, 80), 'Bla bla bla', DiagnosticSeverity.Error )]);
+    state.diagnostics.set(uri, [ new Diagnostic(new Range(2, 0, 2, 80), 'Bla bla bla', DiagnosticSeverity.Error )]);
 }

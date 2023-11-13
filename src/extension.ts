@@ -1,18 +1,19 @@
 import * as vscode from 'vscode';
-import { Wasm } from '@vscode/wasm-wasi';
-import { assemble } from './asmx';
+import { start, assemble } from './asmx';
 
 export async function activate(context: vscode.ExtensionContext) {
 
 	console.log('vscode-asmx: activate() called');
-	const wasm = await Wasm.load();
-	console.log('vscode-asmx: Wasm object loaded');
+	try {
+		const state = await start(context);
+		console.log('vscode-asmx: started');
 
-	const diagnostics = vscode.languages.createDiagnosticCollection('asmx');
-
-	context.subscriptions.push(vscode.commands.registerCommand('vscode-asmx.assemble', async () => {
-		await assemble(context, wasm, diagnostics);
-	}));
+		context.subscriptions.push(vscode.commands.registerCommand('vscode-asmx.assemble', async () => {
+			await assemble(context, state);
+		}));
+	} catch (err) {
+		vscode.window.showErrorMessage(`Failed to setup ASMX extension (${(err as Error).message}`);
+	}
 }
 
 // This method is called when your extension is deactivated
